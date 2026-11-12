@@ -1,0 +1,274 @@
+\documentclass[12pt]{article}
+\input{article_style.tex}
+
+\title{Raport projektowy\\Uczenie się ze wzmocnieniem}
+\author{Jakub Fuhrman}
+\date{2026/2027}
+
+\begin{document}
+\maketitle
+\tableofcontents
+\newpage
+
+\section{Informacje podstawowe}
+
+\begin{center}
+\begin{tabular}{p{0.34\textwidth}p{0.56\textwidth}}
+\toprule
+Element & Informacja \\
+\midrule
+Imię i nazwisko & Jakub Fuhrman \\
+Numer albumu & 179482 \\
+Kierunek/specjalność & Informatyka / Sztuczna inteligencja \\
+Tytuł projektu & Agent-kurier na gridzie z energią i zamykającymi się przejściami \\
+Link do repozytorium & \url{https://github.com/JakubFuh/UszW-kurier-grid} \\
+Data oddania & 12.11.2026 \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\section{Temat i cel projektu}
+
+\subsection{Opis problemu}
+
+Projekt dotyczy problemu decyzyjnego w dyskretnym środowisku siatkowym (grid).
+Agent wciela się w rolę kuriera poruszającego się po mapie z przeszkodami i pułapkami.
+Jego zadaniem jest zbieranie paczek oraz dostarczanie ich do bazy.
+
+Agent dysponuje ograniczonym zasobem energii, która maleje wraz z wykonywanymi ruchami.
+Dodatkowo środowisko zawiera zdarzenia dynamiczne: po zebraniu określonej liczby paczek
+wybrane przejścia na mapie zostają zamknięte. Wymusza to planowanie z wyprzedzeniem,
+a nie wyłącznie lokalne dążenie do najbliższej nagrody.
+
+W projekcie przewidziano kilka map o różnym poziomie trudności
+(różny układ przeszkód, rozmieszczenie paczek, rozmieszczenie pułapek oraz moment zamykania przejść).
+
+\subsection{Cel agenta}
+
+Celem agenta jest dostarczenie wszystkich paczek do bazy przed wyczerpaniem energii
+i przed przekroczeniem limitu kroków, unikając jednocześnie pułapek oraz zablokowania
+na mapie po zamknięciu przejść.
+
+Działanie agenta uznaje się za skuteczne, gdy w epizodzie:
+\begin{itemize}
+    \item wszystkie paczki zostaną zebrane i dostarczone do bazy,
+    \item agent nie wejdzie w pułapkę,
+    \item energia agenta nie spadnie do zera przed ukończeniem zadania,
+    \item nie zostanie przekroczony limit kroków epizodu.
+\end{itemize}
+
+Dodatkowymi miarami jakości będą m.in. średni zwrot (return), skuteczność osiągania celu
+oraz średnia długość epizodu.
+
+\subsection{Uzasadnienie zastosowania uczenia się ze wzmocnieniem}
+
+Problem nadaje się do uczenia się ze wzmocnieniem, ponieważ:
+\begin{itemize}
+    \item decyzje są podejmowane sekwencyjnie --- w każdym kroku agent wybiera kierunek ruchu;
+    \item decyzje wpływają na przyszły stan środowiska --- zmieniają pozycję agenta, poziom energii,
+    liczbę zebranych paczek oraz (po osiągnięciu progu) dostępność przejść na mapie;
+    \item istotny jest wynik długoterminowy --- zebranie najbliższej paczki może później uniemożliwić
+    powrót do bazy po zamknięciu przejść lub doprowadzić do wyczerpania energii;
+    \item zastosowanie agenta uczącego się jest uzasadnione, ponieważ optymalna strategia zależy
+    od układu mapy, kolejności zbierania paczek i zarządzania energią, a nie da się jej w prosty sposób
+    sprowadzić do jednorazowej klasyfikacji lub statycznej optymalizacji.
+\end{itemize}
+
+\section{Formalizacja problemu RL/MDP}
+
+\subsection{Agent i środowisko}
+
+\textbf{Agent:} kurier poruszający się po dyskretnej siatce.\\
+\textbf{Środowisko:} mapa gridowa zawierająca pola wolne, przeszkody, pułapki, paczki, bazę
+oraz przejścia, które mogą zostać zamknięte w trakcie epizodu.
+
+Interakcja w jednym kroku epizodu przebiega następująco:
+\begin{enumerate}
+    \item agent obserwuje bieżący stan (lub obserwację),
+    \item wybiera akcję ruchu,
+    \item środowisko aktualizuje pozycję agenta, energię oraz ewentualnie stan paczek/przejść,
+    \item środowisko zwraca nagrodę $r_t$ oraz informację o zakończeniu epizodu.
+\end{enumerate}
+
+\subsection{Stan lub obserwacja}
+
+W projekcie przyjmuje się pełną obserwowalność stanu (MDP).
+Agent ma dostęp do informacji wystarczających do określenia aktualnej sytuacji na mapie.
+
+\begin{center}
+\begin{tabular}{p{0.30\textwidth}p{0.60\textwidth}}
+\toprule
+Składowa stanu/obserwacji & Znaczenie \\
+\midrule
+Pozycja agenta $(x, y)$ & Aktualne położenie kuriera na siatce \\
+Energia $e$ & Pozostały zasób energii agenta \\
+Maska / zbiór paczek & Informacja, które paczki zostały już zebrane \\
+Flaga zamknięcia przejść & Czy zdarzenie zamknięcia przejść już wystąpiło \\
+Pozycja bazy & Położenie punktu dostawy (stałe dla danej mapy) \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+W implementacji stan będzie reprezentowany w formie dyskretnej, dogodnej dla algorytmu
+tablicowego (Q-learning). Szczegóły kodowania stanu mogą zostać doprecyzowane po pierwszych testach środowiska.
+
+\subsection{Akcje}
+
+Zbiór akcji jest dyskretny i obejmuje ruchy ortogonalne po siatce.
+Próba wejścia w przeszkodę, poza mapę albo w zamknięte przejście nie zmienia pozycji agenta
+(akcja jest nieskuteczna), ale zużywa energię i generuje karę za krok.
+
+\begin{center}
+\begin{tabular}{p{0.30\textwidth}p{0.60\textwidth}}
+\toprule
+Akcja & Opis \\
+\midrule
+\texttt{UP} & Ruch o jedno pole w górę \\
+\texttt{DOWN} & Ruch o jedno pole w dół \\
+\texttt{LEFT} & Ruch o jedno pole w lewo \\
+\texttt{RIGHT} & Ruch o jedno pole w prawo \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\subsection{Funkcja nagrody}
+
+Wstępna funkcja nagrody (do weryfikacji eksperymentalnej):
+
+\begin{equation}
+    r_t =
+    \begin{cases}
+        +10 & \text{zebranie paczki}, \\
+        +50 & \text{dostarczenie wszystkich paczek do bazy (sukces)}, \\
+        -20 & \text{wejście w pułapkę}, \\
+        -20 & \text{wyczerpanie energii}, \\
+        -1 & \text{każdy wykonany krok}, \\
+        0 & \text{w pozostałych przypadkach}.
+    \end{cases}
+\end{equation}
+
+Uzasadnienie:
+\begin{itemize}
+    \item nagroda dodatnia za zebranie paczki motywuje do realizacji zadania cząstkowego,
+    \item duża nagroda końcowa za sukces premiuje ukończenie całego epizodu,
+    \item kary za pułapkę i wyczerpanie energii zniechęcają do ryzykownych strategii,
+    \item kara za krok zachęca do krótszych tras i lepszego zarządzania energią,
+    \item wartości nagród będą ewentualnie korygowane, jeśli okaże się, że agent uczy się
+    niepożądanego zachowania (np. zbiera paczki, ale nie wraca do bazy).
+\end{itemize}
+
+\subsection{Warunki zakończenia epizodu}
+
+Epizod kończy się, gdy zachodzi którakolwiek z sytuacji:
+\begin{itemize}
+    \item sukces --- wszystkie paczki zostały dostarczone do bazy,
+    \item porażka --- agent wszedł w pułapkę,
+    \item porażka --- energia agenta spadła do zera,
+    \item porażka --- przekroczono maksymalną liczbę kroków w epizodzie.
+\end{itemize}
+
+\subsection{Założenia i ograniczenia środowiska}
+
+Na obecnym etapie przyjmuje się następujące założenia:
+\begin{itemize}
+    \item środowisko jest w pełni obserwowalne,
+    \item mapa jest dyskretna i skończona,
+    \item przeszkody są statyczne; dynamiczne są wyłącznie zamykane przejścia,
+    \item energia maleje o stałą wartość przy każdym kroku,
+    \item nie modeluje się fizyki ciągłej ani częściowej obserwowalności (POMDP),
+    \item szczegóły parametrów (rozmiar map, próg zamykania przejść, limity energii)
+    zostaną doprecyzowane podczas implementacji środowiska.
+\end{itemize}
+
+Planowany algorytm uczenia: \textbf{Q-learning}, z możliwością późniejszego porównania z SARSA.
+Jako agentów bazowych przewiduje się agenta losowego oraz agenta zachłannego
+(np. idź w stronę najbliższej paczki / bazy).
+
+\section{Implementacja}
+
+\textit{Sekcja do uzupełnienia w kolejnych etapach projektu.}
+
+\subsection{Struktura repozytorium}
+
+\begin{verbatim}
+UszW-kurier-grid/
+|-- src/
+|-- experiments/
+|-- report/
+|-- results/
+|-- ai_transcripts/
+|-- requirements.txt
+`-- README.md
+\end{verbatim}
+
+\subsection{Środowisko}
+
+Do uzupełnienia po implementacji środowiska (\texttt{reset}, \texttt{step}).
+
+\subsection{Agent bazowy}
+
+Do uzupełnienia: agent losowy oraz agent zachłanny.
+
+\subsection{Agent uczący się}
+
+Do uzupełnienia: Q-learning (ewentualnie porównanie z SARSA).
+
+\section{Plan eksperymentów}
+
+\textit{Sekcja do uzupełnienia w kolejnych etapach projektu.}
+
+\begin{center}
+\begin{tabular}{p{0.24\textwidth}p{0.30\textwidth}p{0.30\textwidth}}
+\toprule
+Eksperyment & Co jest zmieniane? & Co jest mierzone? \\
+\midrule
+E1 & Do uzupełnienia & Do uzupełnienia \\
+E2 & Do uzupełnienia & Do uzupełnienia \\
+E3 & Do uzupełnienia & Do uzupełnienia \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\section{Wyniki}
+
+\textit{Sekcja do uzupełnienia po przeprowadzeniu eksperymentów.}
+
+\section{Analiza i wnioski}
+
+\textit{Sekcja do uzupełnienia po uzyskaniu wyników.}
+
+\section{Instrukcja uruchomienia}
+
+\textit{Sekcja do uzupełnienia po przygotowaniu uruchamialnej wersji projektu.}
+
+\section{Wsparcie AI}
+
+Na etapie przygotowania propozycji tematu i wstępnej formalizacji korzystano ze wsparcia AI
+(Cursor / Composer) do konsultacji pomysłu projektowego oraz redakcji treści rozdziałów 1--3.
+Transkrypty rozmów będą przechowywane w katalogu \texttt{ai_transcripts/} repozytorium.
+Szczegółowa tabela użycia AI będzie uzupełniana na bieżąco w trakcie realizacji projektu.
+
+\begin{center}
+\begin{tabular}{p{0.13\textwidth}p{0.19\textwidth}p{0.21\textwidth}p{0.27\textwidth}}
+\toprule
+Data & Narzędzie/model & Cel użycia & Transkrypt / link / zakres \\
+\midrule
+06--12.11.2026 & Cursor / Composer & Konsultacja tematu, formalizacja RL, redakcja raportu & czat w Cursor; katalog \texttt{ai_transcripts/} \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+Treść merytoryczna została sprawdzona i zaakceptowana przez autora projektu.
+Ostateczna odpowiedzialność za poprawność formalizacji i późniejszą implementację
+spoczywa na studencie.
+
+\section{Literatura}
+
+\begin{thebibliography}{9}
+\bibitem{sutton_barto}
+R. S. Sutton, A. G. Barto, \textit{Reinforcement Learning: An Introduction}, 2nd ed., MIT Press, 2018.
+\bibitem{zasady_projektu}
+Materiały przedmiotu \textit{Uczenie się ze wzmocnieniem}, WEiI PRz, zasady realizacji projektu, 2026/2027.
+\end{thebibliography}
+
+\end{document}
